@@ -276,7 +276,7 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
 // CONFIG
 // ════════════════════════════════════════════════
 const SB_URL = 'https://foqooqibdfcadndoipvz.supabase.co';
-const SB_KEY = 'sb_publishable_1NTVGmHT8LF8j_wkCo362Q_LTVpD9iG';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZvcW9vcWliZGZjYWRuZG9pcHZ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQ0ODIxODIsImV4cCI6MjExMDA1ODE4Mn0.Y7u0ZMQjs7PfKhcbzfBav_PJYH3bieNQAF4vdLMBpjs';
 
 const TIMES = Array.from({length: 18}, (_, i) => {
   const h = Math.floor(i / 2) + 9;
@@ -401,9 +401,10 @@ async function loadSlots() {
 }
 
 async function validatePin(pin) {
-  const { data } = await S.sb.from('access_pins').select('*')
-    .eq('pin', pin).eq('active', true).single();
-  return data || null;
+  const { data, error } = await S.sb.from('access_pins').select('*')
+    .eq('pin', pin).eq('active', true);
+  if (error || !data || data.length === 0) return null;
+  return data[0];
 }
 
 async function markBusy(date, time) {
