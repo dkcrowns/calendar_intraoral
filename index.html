@@ -402,8 +402,9 @@ async function loadSlots() {
 
 async function validatePin(pin) {
   const { data, error } = await S.sb.from('access_pins').select('*')
-    .eq('pin', pin).eq('active', true);
+    .eq('pin', pin);
   if (error || !data || data.length === 0) return null;
+  if (data[0].active === false) return null;
   return data[0];
 }
 
