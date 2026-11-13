@@ -294,7 +294,6 @@ const S = {
   sb: null,
   mode: 'team',                                       // 'team' | 'specialist'
   specName: null,
-  userName: localStorage.getItem('dk_name') || null,
   selectedDay: 0,                                     // 0=Mon … 5=Sat
   weekStart: getMonday(new Date()),
   slots: {},                                          // key: "YYYY-MM-DD_HH:MM" → row
@@ -496,13 +495,11 @@ function renderSlots() {
     const row  = S.slots[key];
     const past = isPast(date, time);
 
-    const type   = row ? row.status : 'free';
-    const isMine = row && row.status === 'booked' && row.booked_by === S.userName;
+    const type = row ? row.status : 'free';
 
     const card = document.createElement('div');
     let cls = `slot ${type}`;
-    if (isMine) cls += ' mine';
-    if (past)   cls += ' past';
+    if (past) cls += ' past';
     card.className = cls;
 
     // Контент карточки
@@ -520,7 +517,7 @@ function renderSlots() {
     } else {
       statusTxt = row.booked_by || 'Занято';
       if (row.label) labelHtml = `<div class="s-label">${row.label}</div>`;
-      if (!past && (isMine || spec)) btnHtml = `<button class="s-btn" title="Отменить запись">✕</button>`;
+      if (!past) btnHtml = `<button class="s-btn" title="Отменить запись">✕</button>`;
     }
 
     card.innerHTML = `
@@ -547,7 +544,7 @@ function renderSlots() {
         if (type === 'free') {
           card.addEventListener('click', () => openBookModal(date, time));
         }
-        if (isMine) {
+        if (type === 'booked') {
           const btn = card.querySelector('.s-btn');
           if (btn) btn.addEventListener('click', e => { e.stopPropagation(); confirmCancel(row); });
         }
@@ -563,19 +560,13 @@ function renderBar() {
   const nameBtn = document.getElementById('nameBtn');
   const modeBtn = document.getElementById('modeBtn');
 
+  nameBtn.style.display = 'none';
   if (spec) {
-    nameBtn.style.display = 'none';
     modeBtn.className = 'btn btn-exit';
     modeBtn.textContent = '← Выйти из режима специалиста';
   } else {
     modeBtn.className = 'btn btn-primary';
     modeBtn.textContent = '🔑 Войти как специалист';
-    if (S.userName) {
-      nameBtn.style.display = 'flex';
-      document.getElementById('nameLbl').textContent = S.userName;
-    } else {
-      nameBtn.style.display = 'none';
-    }
   }
 }
 
@@ -592,21 +583,19 @@ function openOverlay(html, center = false) {
 }
 
 function openBookModal(date, time) {
-  if (!S.userName) { openNameModal(() => openBookModal(date, time)); return; }
-
-  const day  = addDays(S.weekStart, S.selectedDay);
-  const sub  = `${time}  ·  ${day.getDate()} ${MONTHS[day.getMonth()]}`;
-  const ov   = openOverlay(`
+  const day = addDays(S.weekStart, S.selectedDay);
+  const sub = `${time}  ·  ${day.getDate()} ${MONTHS[day.getMonth()]}`;
+  const ov  = openOverlay(`
     <div class="handle"></div>
     <div class="m-title">Записаться</div>
     <div class="m-sub">${sub}</div>
     <div class="field">
-      <label class="lbl">Ваше имя</label>
-      <input class="inp" id="bName" value="${S.userName}" placeholder="Имя">
+      <label class="lbl">Доктор</label>
+      <input class="inp" id="bDoctor" placeholder="Имя доктора">
     </div>
     <div class="field">
-      <label class="lbl">Комментарий (необязательно)</label>
-      <input class="inp" id="bLabel" placeholder="Например: консультация">
+      <label class="lbl">Клиника</label>
+      <input class="inp" id="bClinic" placeholder="Название или адрес">
     </div>
     <div class="m-actions">
       <button class="btn btn-ghost" id="bCancel">Отмена</button>
@@ -616,44 +605,17 @@ function openBookModal(date, time) {
   const m = ov.querySelector('.modal');
   m.querySelector('#bCancel').onclick  = () => ov.remove();
   m.querySelector('#bConfirm').onclick = async () => {
-    const name  = m.querySelector('#bName').value.trim();
-    const label = m.querySelector('#bLabel').value.trim();
-    if (!name) { toast('Введите имя'); return; }
-    S.userName = name;
-    localStorage.setItem('dk_name', name);
+    const doctor = m.querySelector('#bDoctor').value.trim();
+    const clinic = m.querySelector('#bClinic').value.trim();
+    if (!doctor) { toast('Введите имя доктора'); return; }
+    if (!clinic) { toast('Введите клинику'); return; }
     ov.remove();
-    await bookSlot(date, time, name, label);
-    renderBar();
+    await bookSlot(date, time, doctor, clinic);
   };
-  setTimeout(() => m.querySelector('#bName').select(), 300);
+  setTimeout(() => m.querySelector('#bDoctor').focus(), 300);
 }
 
-function openNameModal(cb) {
-  const ov = openOverlay(`
-    <div class="handle"></div>
-    <div class="m-title">Как вас зовут?</div>
-    <div class="m-sub">Один раз — запомним на этом устройстве</div>
-    <div class="field">
-      <input class="inp" id="nInput" placeholder="Ваше имя">
-    </div>
-    <div class="m-actions">
-      <button class="btn btn-primary" id="nSave" style="flex:1">Продолжить</button>
-    </div>`);
 
-  const m = ov.querySelector('.modal');
-  const save = () => {
-    const v = m.querySelector('#nInput').value.trim();
-    if (!v) return;
-    S.userName = v;
-    localStorage.setItem('dk_name', v);
-    ov.remove();
-    renderBar();
-    if (cb) cb();
-  };
-  m.querySelector('#nSave').onclick = save;
-  m.querySelector('#nInput').addEventListener('keydown', e => { if (e.key === 'Enter') save(); });
-  setTimeout(() => m.querySelector('#nInput').focus(), 300);
-}
 
 function openPinModal() {
   const ov = openOverlay(`
@@ -782,7 +744,7 @@ document.getElementById('modeBtn').onclick = () => {
   }
 };
 
-document.getElementById('nameBtn').onclick = () => openNameModal();
+
 
 // ════════════════════════════════════════════════
 // SERVICE WORKER
